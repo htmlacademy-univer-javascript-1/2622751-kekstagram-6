@@ -1,24 +1,14 @@
-// form.js
 import { initFormValidation } from './validate.js';
 import { initScale, resetScale } from './scale.js';
 import { initEffect, resetEffect } from './effects.js';
+import { sendData } from './api.js'; 
+import { showAlert, showSuccessMessage, toggleSubmitButton, isValidFileType } from './util.js';
 
 let pristine = null;
 
-const closeForm = () => {
-  const overlay = document.querySelector('.img-upload__overlay');
+const resetForm = () => {
   const form = document.querySelector('.img-upload__form');
   const fileInput = document.querySelector('#upload-file');
-  
-  console.log('Закрытие формы');
-  
-  if (!overlay) {
-    return;
-  }
-  
-  overlay.classList.add('hidden');
-  document.body.classList.remove('modal-open');
-  document.removeEventListener('keydown', onDocumentKeydown);
   
   if (form) {
     form.reset();
@@ -31,9 +21,31 @@ const closeForm = () => {
   if (pristine) {
     pristine.reset();
   }
-
+  
   resetScale();
   resetEffect();
+  
+  const previewImage = document.querySelector('.img-upload__preview img');
+  if (previewImage) {
+    previewImage.src = 'img/upload-default-image.jpg';
+    previewImage.style.transform = 'scale(1)';
+    previewImage.style.filter = 'none';
+    previewImage.className = '';
+  }
+};
+
+const closeForm = () => {
+  const overlay = document.querySelector('.img-upload__overlay');
+  
+  if (!overlay) {
+    return;
+  }
+  
+  overlay.classList.add('hidden');
+  document.body.classList.remove('modal-open');
+  document.removeEventListener('keydown', onDocumentKeydown);
+  
+  resetForm();
 };
 
 const onDocumentKeydown = (evt) => {
@@ -46,38 +58,63 @@ const onDocumentKeydown = (evt) => {
 const openForm = () => {
   const overlay = document.querySelector('.img-upload__overlay');
   const fileInput = document.querySelector('#upload-file');
+  const previewImage = document.querySelector('.img-upload__preview img');
   
-  console.log('Открытие формы загрузки изображения');
-  
-  if (!overlay || !fileInput) {
-    console.error('Не найдены элементы формы');
+  if (!overlay || !fileInput || !previewImage) {
     return;
   }
   
-  if (fileInput.files[0]) {
-    overlay.classList.remove('hidden');
-    document.body.classList.add('modal-open');
-    document.addEventListener('keydown', onDocumentKeydown);
+  const file = fileInput.files[0];
+  if (!file) {
+    return;
+  }
+  
+  if (!isValidFileType(file)) {
+    showAlert('Пожалуйста, выберите изображение в формате JPEG, PNG, GIF или WebP');
+    fileInput.value = '';
+    return;
+  }
+  
+  const MAX_FILE_SIZE = 5 * 1024 * 1024; 
+  if (file.size > MAX_FILE_SIZE) {
+    showAlert('Файл слишком большой. Максимальный размер: 5MB');
+    fileInput.value = '';
+    return;
+  }
+  
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    previewImage.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+  
+  overlay.classList.remove('hidden');
+  document.body.classList.add('modal-open');
+  document.addEventListener('keydown', onDocumentKeydown);
+  
+  setTimeout(() => {
+    initScale();
+    initEffect();
+  }, 50);
+};
+
+const submitForm = async (formData) => {
+  try {
+    toggleSubmitButton(true);
     
-    console.log('Форма открыта, начинаем инициализацию компонентов');
+    await sendData(formData);
     
-    // Даем время на отрисовку DOM
-    setTimeout(() => {
-      console.log('--- Инициализация масштаба ---');
-      initScale();
-      
-      console.log('--- Инициализация эффектов ---');
-      initEffect();
-      
-      // Проверяем наличие слайдера
-      const sliderContainer = overlay.querySelector('.effect-level');
-      const sliderElement = overlay.querySelector('.effect-level__slider');
-      console.log('Проверка слайдера:', {
-        sliderContainerExists: !!sliderContainer,
-        sliderElementExists: !!sliderElement,
-        sliderHasNoUiSlider: sliderElement ? !!sliderElement.noUiSlider : false
-      });
-    }, 50);
+    closeForm();
+    showSuccessMessage('Ваша фотография успешно опубликована!');
+    
+    console.log('Фотография успешно отправлена на сервер');
+    
+  } catch (error) {
+    console.error('Ошибка отправки формы:', error);
+    showAlert(error.message || 'Не удалось отправить фотографию');
+    
+  } finally {
+    toggleSubmitButton(false);
   }
 };
 
@@ -87,24 +124,14 @@ const initForm = () => {
   const cancelButton = document.querySelector('#upload-cancel');
   const form = document.querySelector('.img-upload__form');
   
-  console.log('=== Инициализация формы загрузки ===');
-  console.log('Найденные элементы:', {
-    fileInput: !!fileInput,
-    overlay: !!overlay,
-    cancelButton: !!cancelButton,
-    form: !!form
-  });
-  
   if (!fileInput || !overlay || !form) {
-    console.error('Не найдены необходимые элементы формы');
+    console.error('Не найдены элементы формы');
     return;
   }
   
   pristine = initFormValidation(form);
   if (!pristine) {
     console.error('Не удалось инициализировать валидацию');
-  } else {
-    console.log('Валидация инициализирована');
   }
   
   fileInput.addEventListener('change', openForm);
@@ -115,21 +142,25 @@ const initForm = () => {
       closeForm();
     });
   }
-  
-  form.addEventListener('submit', (evt) => {
+  form.addEventListener('submit', async (evt) => {
     evt.preventDefault();
-    console.log('Попытка отправки формы');
     
     const isValid = pristine.validate();
-    console.log('Результат валидации:', isValid);
-    
-    if (isValid) {
-      console.log('Форма валидна');
-      // form.submit();
+    if (!isValid) {
+      showAlert('Пожалуйста, исправьте ошибки в форме');
+      return;
     }
+    
+    const formData = new FormData(form);
+    
+    const imageFile = fileInput.files[0];
+    if (imageFile) {
+      formData.append('filename', imageFile);
+    }
+    
+    await submitForm(formData);
   });
   
-  // Обработчики для предотвращения закрытия при фокусе
   const hashtagsInput = form.querySelector('.text__hashtags');
   const commentInput = form.querySelector('.text__description');
   
