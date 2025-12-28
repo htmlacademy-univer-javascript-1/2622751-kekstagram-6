@@ -15,4 +15,6 @@ for (let i = 1; i <= 25; i++) {
   photos.push(photo);
 }
 
+console.log('Сгенерировано фотографий:', photos.length);
+
 export { photos };
