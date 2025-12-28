@@ -1,3 +1,4 @@
+import { openPicture } from './big-picture.js';
 const createPhotoElement = (photo) => {
   const template = document.querySelector('#picture');
   const element = template.content.cloneNode(true);
@@ -13,6 +14,11 @@ const createPhotoElement = (photo) => {
   comments.textContent = photo.comments.length;
   
   link.dataset.id = photo.id;
+
+  link.addEventListener('click', (evt) => {
+    evt.preventDefault();
+    openPicture(photo); 
+  });
   
   return element;
 };
