@@ -1,10 +1,18 @@
 import { initFormValidation } from './validate.js';
 import { initScale, resetScale } from './scale.js';
 import { initEffect, resetEffect } from './effects.js';
-import { sendData } from './api.js'; 
-import { showAlert, showSuccessMessage, toggleSubmitButton, isValidFileType } from './util.js';
+import { sendData } from './api.js';
+import { 
+  showAlert, 
+  showSuccessMessage, 
+  toggleSubmitButton, 
+  isValidFileType, 
+  isValidFileSize,
+  createMessageFromTemplate 
+} from './util.js';
 
 let pristine = null;
+let currentFile = null;
 
 const resetForm = () => {
   const form = document.querySelector('.img-upload__form');
@@ -32,6 +40,13 @@ const resetForm = () => {
     previewImage.style.filter = 'none';
     previewImage.className = '';
   }
+  
+  const effectPreviews = document.querySelectorAll('.effects__preview');
+  effectPreviews.forEach(preview => {
+    preview.style.backgroundImage = 'none';
+  });
+  
+  currentFile = null;
 };
 
 const closeForm = () => {
@@ -55,6 +70,15 @@ const onDocumentKeydown = (evt) => {
   }
 };
 
+const updateEffectPreviews = (imageUrl) => {
+  const effectPreviews = document.querySelectorAll('.effects__preview');
+  effectPreviews.forEach(preview => {
+    preview.style.backgroundImage = `url(${imageUrl})`;
+    preview.style.backgroundSize = 'cover';
+    preview.style.backgroundPosition = 'center';
+  });
+};
+
 const openForm = () => {
   const overlay = document.querySelector('.img-upload__overlay');
   const fileInput = document.querySelector('#upload-file');
@@ -69,24 +93,31 @@ const openForm = () => {
     return;
   }
   
+  currentFile = file;
+  
   if (!isValidFileType(file)) {
     showAlert('Пожалуйста, выберите изображение в формате JPEG, PNG, GIF или WebP');
     fileInput.value = '';
+    currentFile = null;
     return;
   }
   
-  const MAX_FILE_SIZE = 5 * 1024 * 1024; 
-  if (file.size > MAX_FILE_SIZE) {
-    showAlert('Файл слишком большой. Максимальный размер: 5MB');
+  const MAX_FILE_SIZE_MB = 5;
+  if (!isValidFileSize(file, MAX_FILE_SIZE_MB)) {
+    showAlert(`Файл слишком большой. Максимальный размер: ${MAX_FILE_SIZE_MB}MB`);
     fileInput.value = '';
+    currentFile = null;
     return;
   }
   
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    previewImage.src = e.target.result;
+  const imageUrl = URL.createObjectURL(file);
+  
+  previewImage.src = imageUrl;
+  previewImage.onload = () => {
+    URL.revokeObjectURL(imageUrl);
   };
-  reader.readAsDataURL(file);
+  
+  updateEffectPreviews(imageUrl);
   
   overlay.classList.remove('hidden');
   document.body.classList.add('modal-open');
@@ -95,23 +126,69 @@ const openForm = () => {
   setTimeout(() => {
     initScale();
     initEffect();
-  }, 50);
+  }, 100);
 };
 
-const submitForm = async (formData) => {
+const submitForm = async () => {
   try {
     toggleSubmitButton(true);
     
-    await sendData(formData);
+    const form = document.querySelector('.img-upload__form');
+    
+    const cleanFormData = new FormData();
+    
+    if (currentFile) {
+      cleanFormData.append('filename', currentFile);
+    }
+    
+    const hashtagsInput = form.querySelector('.text__hashtags');
+    if (hashtagsInput && hashtagsInput.value.trim() !== '') {
+      cleanFormData.append('hashtags', hashtagsInput.value.trim());
+    }
+    
+    const descriptionInput = form.querySelector('.text__description');
+    if (descriptionInput && descriptionInput.value.trim() !== '') {
+      cleanFormData.append('description', descriptionInput.value.trim());
+    }
+    
+    const scaleInput = document.querySelector('.scale__control--value');
+    if (scaleInput) {
+      const scaleValue = scaleInput.value.replace('%', '');
+      cleanFormData.append('scale', scaleValue);
+    }
+    
+    const effectRadio = document.querySelector('input[name="effect"]:checked');
+    if (effectRadio) {
+      cleanFormData.append('effect', effectRadio.value);
+    }
+    
+    const effectLevelValue = document.querySelector('.effect-level__value');
+    if (effectLevelValue && effectLevelValue.value && effectLevelValue.value !== '') {
+      cleanFormData.append('effect-level', effectLevelValue.value);
+    }
+    
+    console.log('Отправляемые данные:');
+    for (let [key, value] of cleanFormData.entries()) {
+      if (value instanceof File) {
+        console.log(`${key}:`, `Файл - ${value.name}`);
+      } else {
+        console.log(`${key}:`, `"${value}"`);
+      }
+    }
+    
+    const response = await sendData(cleanFormData);
     
     closeForm();
+    
+    createMessageFromTemplate('success');
     showSuccessMessage('Ваша фотография успешно опубликована!');
     
-    console.log('Фотография успешно отправлена на сервер');
-    
   } catch (error) {
-    console.error('Ошибка отправки формы:', error);
-    showAlert(error.message || 'Не удалось отправить фотографию');
+    createMessageFromTemplate('error', () => {
+      toggleSubmitButton(false);
+    });
+    
+    showAlert(error.message);
     
   } finally {
     toggleSubmitButton(false);
@@ -125,14 +202,10 @@ const initForm = () => {
   const form = document.querySelector('.img-upload__form');
   
   if (!fileInput || !overlay || !form) {
-    console.error('Не найдены элементы формы');
     return;
   }
   
   pristine = initFormValidation(form);
-  if (!pristine) {
-    console.error('Не удалось инициализировать валидацию');
-  }
   
   fileInput.addEventListener('change', openForm);
   
@@ -142,8 +215,14 @@ const initForm = () => {
       closeForm();
     });
   }
+  
   form.addEventListener('submit', async (evt) => {
     evt.preventDefault();
+    
+    if (!currentFile) {
+      showAlert('Пожалуйста, выберите фотографию');
+      return;
+    }
     
     const isValid = pristine.validate();
     if (!isValid) {
@@ -151,14 +230,7 @@ const initForm = () => {
       return;
     }
     
-    const formData = new FormData(form);
-    
-    const imageFile = fileInput.files[0];
-    if (imageFile) {
-      formData.append('filename', imageFile);
-    }
-    
-    await submitForm(formData);
+    await submitForm();
   });
   
   const hashtagsInput = form.querySelector('.text__hashtags');
@@ -177,8 +249,6 @@ const initForm = () => {
   if (commentInput) {
     commentInput.addEventListener('keydown', stopEscPropagation);
   }
-  
-  console.log('Форма загрузки инициализирована');
 };
 
 export { initForm };

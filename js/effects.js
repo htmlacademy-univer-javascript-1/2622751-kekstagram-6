@@ -64,7 +64,7 @@ const getEffectElements = () => {
 };
 
 const initEffect = () => {
-  console.log('Инициализация эффектов...');
+  console.log('Инициализация эффектов для пользовательского изображения...');
   
   const elements = getEffectElements();
   if (!elements) {
@@ -90,12 +90,11 @@ const initEffect = () => {
   
   if (typeof window.noUiSlider === 'undefined') {
     console.error('Библиотека noUiSlider не найдена!');
-    console.log('Проверьте что в index.html подключен скрипт: <script src="vendor/nouislider/nouislider.js"></script>');
     return;
   }
   
   try {
-    console.log('Создание слайдера...');
+    console.log('Создание слайдера для пользовательского изображения...');
     
     if (sliderElement.noUiSlider) {
       sliderElement.noUiSlider.destroy();
@@ -122,6 +121,11 @@ const initEffect = () => {
   }
   
   const applyEffect = () => {
+    if (image.src.includes('upload-default-image.jpg')) {
+      console.log('Изображение не загружено, эффекты не применяются');
+      return;
+    }
+    
     if (currentEffect === 'none') {
       image.style.filter = 'none';
       if (effectLevelValue) {
@@ -187,7 +191,7 @@ const initEffect = () => {
     noneRadio.checked = true;
   }
   
-  console.log('Эффекты инициализированы');
+  console.log('Эффекты инициализированы для пользовательского изображения');
 };
 
 const resetEffect = () => {
@@ -196,8 +200,8 @@ const resetEffect = () => {
   const elements = getEffectElements();
   if (!elements) return;
   
- const { image, sliderContainer } = elements;
-
+  const { image, sliderContainer } = elements;
+  
   if (image) {
     image.style.filter = 'none';
     image.className = '';
