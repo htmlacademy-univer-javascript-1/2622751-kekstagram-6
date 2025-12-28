@@ -1,6 +1,6 @@
 const COMMENTS_PER_PAGE = 5; 
 let currentPhotoComments = []; 
-let shownCommentsCount = 0; 
+let shownCommentsCount = 0;
 
 const closePicture = () => {
   document.querySelector('.big-picture').classList.add('hidden');
@@ -47,7 +47,6 @@ const showMoreComments = () => {
     loadButton.classList.add('hidden');
   }
 };
-
 
 const openPicture = (photo) => {
   const bigPicture = document.querySelector('.big-picture');

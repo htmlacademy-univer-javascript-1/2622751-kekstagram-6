@@ -1,4 +1,5 @@
 import { openPicture } from './big-picture.js';
+
 const createPhotoElement = (photo) => {
   const template = document.querySelector('#picture');
   const element = template.content.cloneNode(true);
@@ -13,11 +14,9 @@ const createPhotoElement = (photo) => {
   likes.textContent = photo.likes;
   comments.textContent = photo.comments.length;
   
-  link.dataset.id = photo.id;
-
   link.addEventListener('click', (evt) => {
     evt.preventDefault();
-    openPicture(photo); 
+    openPicture(photo);
   });
   
   return element;
@@ -32,7 +31,9 @@ const renderPictures = (photos) => {
     fragment.appendChild(photoElement);
   });
   
-  container.innerHTML = '';
+  const existingPictures = container.querySelectorAll('.picture');
+  existingPictures.forEach(pic => pic.remove());
+  
   container.appendChild(fragment);
 };
 
